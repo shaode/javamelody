@@ -63,8 +63,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import javax.servlet.ServletResponse;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
+import javax.servlet.http.HttpServletResponseWrapper;
 
 /**
  * Contrôleur au sens MVC de l'ihm de monitoring.
@@ -210,7 +212,7 @@ class MonitoringController {
 		// on teste CompressionServletResponseWrapper car il peut déjà être mis dans le serveur de collecte
 		// par CollectorServlet.doCompressedPart
 		if (isCompressionSupported(httpRequest)
-				&& !(httpResponse instanceof CompressionServletResponseWrapper)
+				&& !(hasCompression(httpResponse))
 				// this checks if if it is the Hudson / Jenkins plugin
 				// (another filter may already compress the stream, in which case we must not compress a second time,
 				// in particular for org.kohsuke.stapler.compression.CompressionFilter
@@ -261,7 +263,7 @@ class MonitoringController {
 		// et on teste CompressionServletResponseWrapper car il peut déjà être mis dans le serveur de collecte
 		// par CollectorServlet.doCompressedPart
 		if (isCompressionSupported(httpRequest)
-				&& !(httpResponse instanceof CompressionServletResponseWrapper)
+				&& !hasCompression(httpResponse)
 				&& !GZIP_COMPRESSION_DISABLED) {
 			// comme les données peuvent être volumineuses avec toutes les requêtes sql et http
 			// et les threads on compresse le flux de réponse en gzip à partir de 50 Ko
@@ -279,7 +281,24 @@ class MonitoringController {
 		}
 	}
 
-	private void doSerializable(HttpServletRequest httpRequest, HttpServletResponse httpResponse,
+    private boolean hasCompression(HttpServletResponse response) {
+        ServletResponse resp = response;
+        while(true) {
+            // org.kohsuke.stapler.compression.CompressionServletResponse
+            // or our own CompressionServletResponseWrapper
+            if (resp.getClass().getSimpleName().startsWith("Compression")) {
+                return true;
+            }
+            if (resp instanceof HttpServletResponseWrapper) {
+                resp = ((HttpServletResponseWrapper) resp).getResponse();
+            } else {
+                break;
+            }
+        }
+        return false;
+    }
+
+    private void doSerializable(HttpServletRequest httpRequest, HttpServletResponse httpResponse,
 			Serializable serializable) throws IOException {
 		// l'appelant (un serveur d'agrégation par exemple) peut appeler
 		// la page monitoring avec un format "serialized" ou "xml" en paramètre
